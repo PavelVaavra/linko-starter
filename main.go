@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"boot.dev/linko/internal/linkoerr"
 	"boot.dev/linko/internal/store"
 	pkgerr "github.com/pkg/errors"
 )
@@ -33,17 +34,28 @@ type stackTracer interface {
 	StackTrace() pkgerr.StackTrace
 }
 
+// Update replaceAttr to extract attributes with linkoerr.Attrs(err) and include them in the grouped "error" fields with slog.GroupAttrs.
+// The error group (with "message" and any extracted attrs) should always be produced when the value is an error, not only when a stack trace is present.
 func replaceAttr(groups []string, a slog.Attr) slog.Attr {
 	if a.Key == "error" {
+		err, ok := a.Value.Any().(error)
+		if !ok {
+			return a
+		}
+		var attrs []slog.Attr
+		attrs = append(attrs, slog.Attr{
+			Key:   "message",
+			Value: slog.StringValue(err.Error()),
+		})
+		attrs = append(attrs, linkoerr.Attrs(err)...)
+		// fmt.Println(attrs)
 		if stackErr, ok := errors.AsType[stackTracer](a.Value.Any().(error)); ok {
-			return slog.GroupAttrs("error", slog.Attr{
-				Key:   "message",
-				Value: slog.StringValue(stackErr.Error()),
-			}, slog.Attr{
+			attrs = append(attrs, slog.Attr{
 				Key:   "stack_trace",
 				Value: slog.StringValue(fmt.Sprintf("%+v", stackErr.StackTrace())),
 			})
 		}
+		return slog.GroupAttrs("error", attrs...)
 	}
 	return a
 }
@@ -106,9 +118,7 @@ func run(ctx context.Context, cancel context.CancelFunc, httpPort int, dataDir s
 
 	st, err := store.New(dataDir, logger)
 	if err != nil {
-		logger.Error("failed to create store",
-			slog.String("error", err.Error()),
-		)
+		logger.Error("failed to create store", "error", err)
 		return 1
 	}
 	s := newServer(*st, httpPort, cancel, logger)
@@ -123,15 +133,11 @@ func run(ctx context.Context, cancel context.CancelFunc, httpPort int, dataDir s
 
 	logger.Debug("Linko is shutting down")
 	if err := s.shutdown(shutdownCtx); err != nil {
-		logger.Error("failed to shutdown server",
-			slog.String("error", err.Error()),
-		)
+		logger.Error("failed to shutdown server", "error", err)
 		return 1
 	}
 	if serverErr != nil {
-		logger.Error("server error",
-			slog.String("error", serverErr.Error()),
-		)
+		logger.Error("server error", "error", serverErr)
 		return 1
 	}
 	return 0
