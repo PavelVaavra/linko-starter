@@ -35,3 +35,9 @@ func (w *spyResponseWriter) WriteHeader(statusCode int) {
 	w.statusCode = statusCode
 	w.ResponseWriter.WriteHeader(statusCode)
 }
+
+const logContextKey contextKey = "log_context"
+
+type LogContext struct {
+	Username string
+}
