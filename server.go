@@ -77,6 +77,9 @@ func requestLogger(logger *slog.Logger) func(http.Handler) http.Handler {
 			if logCtx.Username != "" {
 				attrs = append(attrs, slog.String("user", logCtx.Username))
 			}
+			if logCtx.Error != nil {
+				attrs = append(attrs, "error", logCtx.Error)
+			}
 			logger.Info("Served request", attrs...)
 		})
 	}
