@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"io"
+	"net"
 	"net/http"
 )
 
@@ -54,4 +56,20 @@ func httpError(ctx context.Context, w http.ResponseWriter, status int, err error
 		msg = http.StatusText(status)
 	}
 	http.Error(w, msg, status)
+}
+
+func redactIP(ip string) string {
+	// Implement your IP redaction logic here
+	host, _, err := net.SplitHostPort(ip)
+	if err != nil {
+		return ""
+	}
+	addr := net.ParseIP(host)
+	if addr == nil {
+		return ""
+	}
+	if addr := addr.To4(); addr != nil {
+		return fmt.Sprintf("%d.%d.%d.x", addr[0], addr[1], addr[2])
+	}
+	return ip
 }
