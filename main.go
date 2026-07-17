@@ -6,8 +6,10 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"os"
 	"os/signal"
+	"slices"
 	"syscall"
 	"time"
 
@@ -45,6 +47,13 @@ type multiError interface {
 // Update replaceAttr to extract attributes with linkoerr.Attrs(err) and include them in the grouped "error" fields with slog.GroupAttrs.
 // The error group (with "message" and any extracted attrs) should always be produced when the value is an error, not only when a stack trace is present.
 func replaceAttr(groups []string, a slog.Attr) slog.Attr {
+	var sensitiveKeys = []string{"password", "key", "apikey", "secret", "pin", "creditcardno", "user"}
+	if slices.Contains(sensitiveKeys, a.Key) {
+		return slog.String(a.Key, "[REDACTED]")
+	}
+	if s, ok := a.Value.Any().(string); ok {
+		return slog.String(a.Key, redactURLPassword(s))
+	}
 	if a.Key == "error" {
 		err, ok := a.Value.Any().(error)
 		if !ok {
@@ -60,6 +69,29 @@ func replaceAttr(groups []string, a slog.Attr) slog.Attr {
 		return slog.GroupAttrs("error", errorAttrs(err)...)
 	}
 	return a
+}
+
+func redactURLPassword(s string) string {
+	u, err := url.Parse(s)
+	if err != nil {
+		return s
+	}
+
+	// Check whether this really looks like a URL.
+	// Accept absolute URLs like https://example.com.
+	if u.Scheme == "" || u.Host == "" {
+		return s
+	}
+
+	if u.User != nil {
+		if username := u.User.Username(); username != "" {
+			if _, hasPassword := u.User.Password(); hasPassword {
+				u.User = url.UserPassword(username, "[REDACTED]")
+				return u.String()
+			}
+		}
+	}
+	return s
 }
 
 func errorAttrs(err error) []slog.Attr {
