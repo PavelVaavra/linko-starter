@@ -6,6 +6,9 @@ import (
 	"io"
 	"net"
 	"net/http"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
 type spyReadCloser struct {
@@ -72,4 +75,23 @@ func redactIP(ip string) string {
 		return fmt.Sprintf("%d.%d.%d.x", addr[0], addr[1], addr[2])
 	}
 	return ip
+}
+
+// httpRequestsTotal counts requests by method, path and status.
+var httpRequestsTotal = promauto.NewCounterVec(
+	prometheus.CounterOpts{
+		Name: "http_requests_total",
+		Help: "Total number of HTTP requests.",
+	},
+	[]string{"method", "path", "status"},
+)
+
+type statusRecorder struct {
+	http.ResponseWriter
+	status int
+}
+
+func (r *statusRecorder) WriteHeader(code int) {
+	r.status = code
+	r.ResponseWriter.WriteHeader(code)
 }
