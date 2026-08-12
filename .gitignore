@@ -6,3 +6,4 @@ vendor/
 *.gz
 *.txt
 *.prof
+*.svg
